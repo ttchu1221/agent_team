@@ -4,7 +4,7 @@ import { useState } from "react";
 import ChatPanel from "@/components/ChatPanel";
 import TaskList from "@/components/TaskList";
 import CinnamorollPet from "@/components/CinnamorollPet";
-import { MessageSquare, ListTodo, Briefcase, FlaskConical, Home } from "lucide-react";
+import { MessageSquare, ListTodo, Briefcase, FlaskConical, Home, DollarSign, Plane, Heart } from "lucide-react";
 
 const navItems = [
   { id: "chat", icon: MessageSquare, label: "对话" },
@@ -12,6 +12,9 @@ const navItems = [
   { id: "career", icon: Briefcase, label: "求职" },
   { id: "research", icon: FlaskConical, label: "科研" },
   { id: "life", icon: Home, label: "生活" },
+  { id: "finance", icon: DollarSign, label: "财务" },
+  { id: "travel", icon: Plane, label: "旅行" },
+  { id: "health", icon: Heart, label: "健康" },
 ];
 
 export default function HomePage() {
@@ -61,7 +64,7 @@ export default function HomePage() {
           </div>
         )}
 
-        {(activeTab === "career" || activeTab === "research" || activeTab === "life") && (
+        {(activeTab === "career" || activeTab === "research" || activeTab === "life" || activeTab === "finance" || activeTab === "travel" || activeTab === "health") && (
           <div className="flex-1">
             <ChatPanel />
           </div>

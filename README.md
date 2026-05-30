@@ -2,6 +2,13 @@
 
 多智能体协作系统 - 你的个人 AI 助理平台
 
+## 功能概览
+
+- **8 个专业 Agent**：对话、求职、科研、生活、学习、财务、旅行、健康
+- **智能调度**：Chief Agent 自动理解意图、拆解任务、分发给对应 Agent
+- **虚拟宠物**：可爱的桌面宠物，陪伴你的工作时光
+- **全中文界面**：面向中文用户的本地化体验
+
 ## 项目结构
 
 ```
@@ -9,9 +16,10 @@ agent_team/
 ├── frontend/              # Next.js 15 前端
 │   ├── src/
 │   │   ├── app/           # 页面路由
-│   │   ├── components/    # React 组件
+│   │   ├── components/    # React 组件 (ChatPanel, TaskList, CinnamorollPet 等)
 │   │   ├── lib/           # API 客户端
 │   │   └── stores/        # Zustand 状态管理
+│   ├── public/            # 静态资源
 │   └── Dockerfile
 ├── backend/               # FastAPI 后端
 │   ├── app/
@@ -19,7 +27,11 @@ agent_team/
 │   │   │   ├── chief/     # 调度中心
 │   │   │   ├── career/    # 职业发展
 │   │   │   ├── research/  # 学术研究
-│   │   │   └── life/      # 生活管理
+│   │   │   ├── life/      # 生活管理
+│   │   │   ├── study/     # 学习规划
+│   │   │   ├── finance/   # 财务管理
+│   │   │   ├── travel/    # 旅行规划
+│   │   │   └── health/    # 健康管理
 │   │   ├── tools/         # 统一工具层
 │   │   ├── core/          # 核心逻辑
 │   │   ├── api/           # API 路由
@@ -76,10 +88,19 @@ npm run dev
 
 ## Agent 说明
 
+### 核心 Agent (P0 - MVP)
+
 - **Chief Agent** - 任务调度中心，理解意图、拆解任务、分发给专业 Agent
 - **Career Agent** - 职业发展助手：JD分析、简历优化、面试准备
 - **Research Agent** - 学术研究助手：论文摘要、科研日报、文献综述
 - **Life Agent** - 生活管理助手：Todo管理、文件整理、日程规划
+
+### 扩展 Agent
+
+- **Study Agent** (P1) - 学习规划助手：目标拆解、路径规划、资源推荐、进度跟踪
+- **Finance Agent** (P2) - 财务管理助手：消费记录、支出分析、预算管理、订阅管理
+- **Travel Agent** (P2) - 旅行规划助手：行程规划、住宿推荐、交通方案、预算估算
+- **Health Agent** (P3) - 健康管理助手：健康记录、趋势分析、目标追踪、健康报告
 
 ## 测试
 
