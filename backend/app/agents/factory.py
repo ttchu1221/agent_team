@@ -9,7 +9,15 @@ from app.agents.chief.agent import ChiefAgent
 from app.agents.career.agent import CareerAgent
 from app.agents.research.agent import ResearchAgent
 from app.agents.life.agent import LifeAgent
+from app.agents.study.agent import StudyAgent
+from app.agents.finance.agent import FinanceAgent
+from app.agents.travel.agent import TravelAgent
+from app.agents.health.agent import HealthAgent
 from app.core.llm_router import LLMRouter
+
+
+# 需要数据库注入的 Agent 类型
+_AGENTS_WITH_DB = {"life", "study", "finance", "travel", "health"}
 
 
 class AgentFactory:
@@ -20,6 +28,10 @@ class AgentFactory:
         "career": CareerAgent,
         "research": ResearchAgent,
         "life": LifeAgent,
+        "study": StudyAgent,
+        "finance": FinanceAgent,
+        "travel": TravelAgent,
+        "health": HealthAgent,
     }
 
     @classmethod
@@ -34,8 +46,8 @@ class AgentFactory:
         if not agent_class:
             raise ValueError(f"Unknown agent type: {agent_type}")
 
-        if agent_type == "life":
-            return LifeAgent(router=router, db=db)
+        if agent_type in _AGENTS_WITH_DB:
+            return agent_class(router=router, db=db)
         return agent_class(router=router)
 
     @classmethod

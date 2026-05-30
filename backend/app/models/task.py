@@ -22,6 +22,8 @@ class AgentType(str, enum.Enum):
     LIFE = "life"
     STUDY = "study"
     FINANCE = "finance"
+    TRAVEL = "travel"
+    HEALTH = "health"
 
 
 class TaskDocument(BaseModel):
