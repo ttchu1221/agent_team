@@ -2,6 +2,13 @@
 
 多智能体协作系统 - 你的个人 AI 助理平台
 
+## 功能概览
+
+- **8 个专业 Agent**：对话、求职、科研、生活、学习、财务、旅行、健康
+- **智能调度**：Chief Agent 自动理解意图、拆解任务、分发给对应 Agent
+- **虚拟宠物**：可爱的桌面宠物，陪伴你的工作时光
+- **全中文界面**：面向中文用户的本地化体验
+
 ## 项目结构
 
 ```
@@ -9,9 +16,10 @@ agent_team/
 ├── frontend/              # Next.js 15 前端
 │   ├── src/
 │   │   ├── app/           # 页面路由
-│   │   ├── components/    # React 组件
+│   │   ├── components/    # React 组件 (ChatPanel, TaskList, CinnamorollPet 等)
 │   │   ├── lib/           # API 客户端
 │   │   └── stores/        # Zustand 状态管理
+│   ├── public/            # 静态资源
 │   └── Dockerfile
 ├── backend/               # FastAPI 后端
 │   ├── app/
