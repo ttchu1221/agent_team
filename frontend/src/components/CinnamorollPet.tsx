@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 
 // ============================================================
 //  玉桂狗 (Cinnamoroll) 虚拟宠物组件
-//  更准确的外观 - 蓝色眼睛、长耳朵、粉色腮红
+//  准确外观：黑色眼睛、长垂耳、粉色腮红、白色蓬松
 // ============================================================
 
 type PetState = "idle" | "wander" | "sleep" | "happy" | "follow" | "play";
@@ -56,7 +56,6 @@ export default function CinnamorollPet() {
   const heartIdRef = useRef(0);
   const dragOffset = useRef<PetPosition>({ x: 0, y: 0 });
 
-  // 初始化位置
   useEffect(() => {
     if (typeof window === "undefined") return;
     const x = window.innerWidth - 120;
@@ -66,7 +65,6 @@ export default function CinnamorollPet() {
     setInitialized(true);
   }, []);
 
-  // 追踪鼠标
   useEffect(() => {
     const handleMouse = (e: MouseEvent) => {
       mouseRef.current = { x: e.clientX, y: e.clientY };
@@ -75,7 +73,6 @@ export default function CinnamorollPet() {
     return () => window.removeEventListener("mousemove", handleMouse);
   }, []);
 
-  // 眨眼动画
   useEffect(() => {
     const blink = () => {
       setIsBlinking(true);
@@ -87,7 +84,6 @@ export default function CinnamorollPet() {
     return () => clearInterval(blinkTimerRef.current);
   }, []);
 
-  // 状态机：随机切换行为
   const scheduleNextState = useCallback(() => {
     clearTimeout(timerRef.current);
     const currentState = stateRef.current;
@@ -137,7 +133,6 @@ export default function CinnamorollPet() {
     return () => clearTimeout(timerRef.current);
   }, [initialized, scheduleNextState]);
 
-  // 移动循环
   useEffect(() => {
     if (!initialized || isDragging) return;
 
@@ -196,7 +191,6 @@ export default function CinnamorollPet() {
     return () => cancelAnimationFrame(raf);
   }, [initialized, isDragging]);
 
-  // 耳朵拍动
   useEffect(() => {
     const interval = setInterval(() => {
       if (stateRef.current !== "sleep") {
@@ -207,7 +201,6 @@ export default function CinnamorollPet() {
     return () => clearInterval(interval);
   }, []);
 
-  // 点击互动
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
 
@@ -229,7 +222,6 @@ export default function CinnamorollPet() {
     }, 1500);
   }, []);
 
-  // 拖拽
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -269,7 +261,6 @@ export default function CinnamorollPet() {
       className="fixed z-[9999] select-none"
       style={{ left: pos.x, top: pos.y, pointerEvents: "none" }}
     >
-      {/* 爱心特效 */}
       {hearts.map((h) => (
         <div
           key={h.id}
@@ -280,14 +271,12 @@ export default function CinnamorollPet() {
         </div>
       ))}
 
-      {/* 想法气泡 */}
       {showThought && (
         <div className="absolute -top-10 left-1/2 -translate-x-1/2 thought-bubble">
           <span className="text-lg">{thought}</span>
         </div>
       )}
 
-      {/* Zzz 动画 */}
       {isSleeping && zCount > 0 && (
         <div className="absolute -top-8 right-0 flex gap-1 zzz-container">
           {Array.from({ length: zCount }).map((_, i) => (
@@ -306,7 +295,7 @@ export default function CinnamorollPet() {
         </div>
       )}
 
-      {/* 玉桂狗 SVG - 更准确的外观 */}
+      {/* 玉桂狗 SVG - 准确外观 */}
       <div
         className={`cursor-pointer pointer-events-auto ${bounceClass} ${isHappy ? "pet-happy" : ""}`}
         style={{
@@ -318,138 +307,122 @@ export default function CinnamorollPet() {
       >
         <svg
           width="80"
-          height="100"
-          viewBox="0 0 200 250"
+          height="120"
+          viewBox="0 0 200 300"
           xmlns="http://www.w3.org/2000/svg"
           style={{
             filter: isSleeping ? "brightness(0.9) saturate(0.8)" : undefined,
             transition: "filter 0.5s",
           }}
         >
-          {/* 左耳 - 长而柔软，下垂 */}
+          {/* 左耳 - 超长垂耳，从头顶垂到身体 */}
           <g
             className={earFlap ? "ear-flap-left" : ""}
-            style={{ transformOrigin: "75px 90px" }}
+            style={{ transformOrigin: "70px 100px" }}
           >
             <path
-              d="M 70 95 Q 55 60 45 30 Q 40 15 50 10 Q 60 5 65 25 Q 70 50 72 80"
+              d="M 65 105 Q 50 70 40 40 Q 35 20 45 15 Q 55 10 58 35 Q 62 60 65 90"
               fill="white"
-              stroke="#E8D5E0"
-              strokeWidth="2"
+              stroke="#DDD0D8"
+              strokeWidth="1.5"
             />
             <path
-              d="M 68 85 Q 58 55 52 30 Q 48 18 55 15 Q 62 12 65 35 Q 68 55 70 75"
-              fill="#FFE8F0"
-              opacity="0.4"
+              d="M 63 95 Q 52 65 45 40 Q 42 25 50 20 Q 58 18 60 40 Q 62 60 64 85"
+              fill="#FFE4EC"
+              opacity="0.5"
             />
           </g>
 
-          {/* 右耳 - 长而柔软，下垂 */}
+          {/* 右耳 - 超长垂耳 */}
           <g
             className={earFlap ? "ear-flap-right" : ""}
-            style={{ transformOrigin: "125px 90px" }}
+            style={{ transformOrigin: "130px 100px" }}
           >
             <path
-              d="M 130 95 Q 145 60 155 30 Q 160 15 150 10 Q 140 5 135 25 Q 130 50 128 80"
+              d="M 135 105 Q 150 70 160 40 Q 165 20 155 15 Q 145 10 142 35 Q 138 60 135 90"
               fill="white"
-              stroke="#E8D5E0"
-              strokeWidth="2"
+              stroke="#DDD0D8"
+              strokeWidth="1.5"
             />
             <path
-              d="M 132 85 Q 142 55 148 30 Q 152 18 145 15 Q 138 12 135 35 Q 132 55 130 75"
-              fill="#FFE8F0"
-              opacity="0.4"
+              d="M 137 95 Q 148 65 155 40 Q 158 25 150 20 Q 142 18 140 40 Q 138 60 136 85"
+              fill="#FFE4EC"
+              opacity="0.5"
             />
           </g>
 
-          {/* 身体 - 白色圆润 */}
-          <ellipse cx="100" cy="175" rx="45" ry="50" fill="white" stroke="#E8D5E0" strokeWidth="2" />
-          
-          {/* 头部 - 圆润白色 */}
-          <ellipse cx="100" cy="100" rx="55" ry="48" fill="white" stroke="#E8D5E0" strokeWidth="2" />
+          {/* 身体 - 白色圆润短小 */}
+          <ellipse cx="100" cy="200" rx="40" ry="45" fill="white" stroke="#DDD0D8" strokeWidth="1.5" />
 
-          {/* 腮红 - 明显的粉色 */}
-          <ellipse cx="60" cy="110" rx="14" ry="9" fill="#FFB6C1" opacity={isHappy ? "0.9" : "0.6"} />
-          <ellipse cx="140" cy="110" rx="14" ry="9" fill="#FFB6C1" opacity={isHappy ? "0.9" : "0.6"} />
+          {/* 头部 - 大而圆 */}
+          <ellipse cx="100" cy="110" rx="58" ry="52" fill="white" stroke="#DDD0D8" strokeWidth="1.5" />
 
-          {/* 眼睛 - 大而圆，蓝色瞳孔 */}
+          {/* 腮红 - 明显的粉红色圆形 */}
+          <ellipse cx="58" cy="120" rx="12" ry="8" fill="#FFB6C1" opacity={isHappy ? "0.9" : "0.7"} />
+          <ellipse cx="142" cy="120" rx="12" ry="8" fill="#FFB6C1" opacity={isHappy ? "0.9" : "0.7"} />
+
+          {/* 眼睛 - 黑色，半月形/弯月形 */}
           {isSleeping ? (
             <>
-              {/* 闭眼 - 弯弯的弧线 */}
-              <path d="M 78 98 Q 85 92 92 98" fill="none" stroke="#2E4057" strokeWidth="2.5" strokeLinecap="round" />
-              <path d="M 108 98 Q 115 92 122 98" fill="none" stroke="#2E4057" strokeWidth="2.5" strokeLinecap="round" />
+              {/* 闭眼 - 弯弯的微笑弧线 */}
+              <path d="M 80 108 Q 87 102 94 108" fill="none" stroke="#2D2D2D" strokeWidth="2.5" strokeLinecap="round" />
+              <path d="M 106 108 Q 113 102 120 108" fill="none" stroke="#2D2D2D" strokeWidth="2.5" strokeLinecap="round" />
             </>
           ) : isBlinking ? (
             <>
-              {/* 眨眼 */}
-              <line x1="78" y1="98" x2="92" y2="98" stroke="#2E4057" strokeWidth="2.5" strokeLinecap="round" />
-              <line x1="108" y1="98" x2="122" y2="98" stroke="#2E4057" strokeWidth="2.5" strokeLinecap="round" />
+              <line x1="80" y1="108" x2="94" y2="108" stroke="#2D2D2D" strokeWidth="2.5" strokeLinecap="round" />
+              <line x1="106" y1="108" x2="120" y2="108" stroke="#2D2D2D" strokeWidth="2.5" strokeLinecap="round" />
             </>
           ) : (
             <>
-              {/* 左眼 */}
-              <ellipse cx="85" cy="96" rx="10" ry="11" fill="#4A90D9" />
-              <ellipse cx="85" cy="96" rx="7" ry="8" fill="#2E5B8C" />
-              <ellipse cx="85" cy="95" rx="4" ry="4.5" fill="#1A3A5C" />
+              {/* 左眼 - 大而圆，黑色 */}
+              <ellipse cx="87" cy="106" rx="8" ry="9" fill="#2D2D2D" />
               {/* 高光 */}
-              <ellipse cx="82" cy="92" rx="3" ry="3.5" fill="white" />
-              <ellipse cx="88" cy="98" rx="1.5" ry="2" fill="white" opacity="0.7" />
+              <ellipse cx="84" cy="103" rx="2.5" ry="3" fill="white" />
+              <ellipse cx="90" cy="108" rx="1.2" ry="1.5" fill="white" opacity="0.6" />
               
-              {/* 右眼 */}
-              <ellipse cx="115" cy="96" rx="10" ry="11" fill="#4A90D9" />
-              <ellipse cx="115" cy="96" rx="7" ry="8" fill="#2E5B8C" />
-              <ellipse cx="115" cy="95" rx="4" ry="4.5" fill="#1A3A5C" />
+              {/* 右眼 - 大而圆，黑色 */}
+              <ellipse cx="113" cy="106" rx="8" ry="9" fill="#2D2D2D" />
               {/* 高光 */}
-              <ellipse cx="112" cy="92" rx="3" ry="3.5" fill="white" />
-              <ellipse cx="118" cy="98" rx="1.5" ry="2" fill="white" opacity="0.7" />
+              <ellipse cx="110" cy="103" rx="2.5" ry="3" fill="white" />
+              <ellipse cx="116" cy="108" rx="1.2" ry="1.5" fill="white" opacity="0.6" />
             </>
           )}
 
-          {/* 鼻子 - 小巧粉色 */}
-          <ellipse cx="100" cy="108" rx="4" ry="3" fill="#FFB6C1" />
+          {/* 鼻子 - 小巧黑色 */}
+          <ellipse cx="100" cy="118" rx="3.5" ry="2.5" fill="#2D2D2D" />
 
-          {/* 嘴巴 - 微笑 */}
+          {/* 嘴巴 - w形或微笑曲线 */}
           {isHappy ? (
-            <path d="M 92 113 Q 100 122 108 113" fill="none" stroke="#2E4057" strokeWidth="2" strokeLinecap="round" />
+            <path d="M 93 123 Q 97 128 100 125 Q 103 128 107 123" fill="none" stroke="#2D2D2D" strokeWidth="1.8" strokeLinecap="round" />
           ) : (
-            <path d="M 95 113 Q 100 118 105 113" fill="none" stroke="#2E4057" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M 95 123 Q 100 127 105 123" fill="none" stroke="#2D2D2D" strokeWidth="1.5" strokeLinecap="round" />
           )}
 
-          {/* 蝴蝶结 - 蓝色，头顶 */}
-          <g transform="translate(100, 62)">
-            {/* 左翼 */}
-            <path d="M -2 0 C -8 -12 -22 -14 -18 -4 C -22 6 -8 8 -2 0" fill="#87CEEB" stroke="#5BA3C7" strokeWidth="1" />
-            {/* 右翼 */}
-            <path d="M 2 0 C 8 -12 22 -14 18 -4 C 22 6 8 8 2 0" fill="#87CEEB" stroke="#5BA3C7" strokeWidth="1" />
-            {/* 中心结 */}
-            <circle cx="0" cy="0" r="4" fill="#5BA3C7" />
-            <circle cx="0" cy="0" r="2" fill="#87CEEB" />
+          {/* 蝴蝶结 - 蓝色，头顶偏右 */}
+          <g transform="translate(115, 72)">
+            <path d="M -2 0 C -6 -10 -18 -12 -15 -3 C -18 5 -6 7 -2 0" fill="#87CEEB" stroke="#6BB8D6" strokeWidth="1" />
+            <path d="M 2 0 C 6 -10 18 -12 15 -3 C 18 5 6 7 2 0" fill="#87CEEB" stroke="#6BB8D6" strokeWidth="1" />
+            <circle cx="0" cy="0" r="3" fill="#6BB8D6" />
           </g>
 
-          {/* 小手 - 圆润 */}
-          <ellipse cx="60" cy="168" rx="10" ry="7" fill="white" stroke="#E8D5E0" strokeWidth="1.5" transform="rotate(-15, 60, 168)" />
-          <ellipse cx="140" cy="168" rx="10" ry="7" fill="white" stroke="#E8D5E0" strokeWidth="1.5" transform="rotate(15, 140, 168)" />
+          {/* 小手 - 短小圆润 */}
+          <ellipse cx="65" cy="195" rx="8" ry="6" fill="white" stroke="#DDD0D8" strokeWidth="1.2" transform="rotate(-10, 65, 195)" />
+          <ellipse cx="135" cy="195" rx="8" ry="6" fill="white" stroke="#DDD0D8" strokeWidth="1.2" transform="rotate(10, 135, 195)" />
 
-          {/* 小脚 - 圆润 */}
-          <ellipse cx="78" cy="220" rx="16" ry="9" fill="white" stroke="#E8D5E0" strokeWidth="1.5" />
-          <ellipse cx="122" cy="220" rx="16" ry="9" fill="white" stroke="#E8D5E0" strokeWidth="1.5" />
+          {/* 小脚 - 短小圆润 */}
+          <ellipse cx="82" cy="242" rx="14" ry="8" fill="white" stroke="#DDD0D8" strokeWidth="1.2" />
+          <ellipse cx="118" cy="242" rx="14" ry="8" fill="white" stroke="#DDD0D8" strokeWidth="1.2" />
 
-          {/* 尾巴 - 肉桂卷形状 */}
-          <g className={tailWag ? "tail-wag" : ""} style={{ transformOrigin: "142px 185px" }}>
-            <path
-              d="M 142 185 C 160 180 168 170 165 160 C 162 150 152 152 155 162 C 158 170 150 175 145 180"
-              fill="white"
-              stroke="#E8D5E0"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
+          {/* 尾巴 - 短小绒球状 */}
+          <g className={tailWag ? "tail-wag" : ""} style={{ transformOrigin: "140px 210px" }}>
+            <circle cx="148" cy="208" r="12" fill="white" stroke="#DDD0D8" strokeWidth="1.2" />
           </g>
         </svg>
       </div>
 
-      {/* 宠物名字标签 */}
       <div className="text-center mt-0.5">
-        <span className="text-[10px] text-blue-300 font-medium opacity-70">Cinnamoroll</span>
+        <span className="text-[10px] text-pink-300 font-medium opacity-70">Cinnamoroll</span>
       </div>
 
       <style jsx>{`
@@ -474,8 +447,8 @@ export default function CinnamorollPet() {
           animation: wag 0.3s ease-in-out infinite alternate;
         }
         @keyframes wag {
-          0% { transform: rotate(-10deg); }
-          100% { transform: rotate(10deg); }
+          0% { transform: rotate(-8deg); }
+          100% { transform: rotate(8deg); }
         }
 
         .ear-flap-left {
@@ -486,11 +459,11 @@ export default function CinnamorollPet() {
         }
         @keyframes ear-flap-l {
           0%, 100% { transform: rotate(0deg); }
-          50% { transform: rotate(8deg); }
+          50% { transform: rotate(5deg); }
         }
         @keyframes ear-flap-r {
           0%, 100% { transform: rotate(0deg); }
-          50% { transform: rotate(-8deg); }
+          50% { transform: rotate(-5deg); }
         }
 
         .thought-bubble {
@@ -499,7 +472,7 @@ export default function CinnamorollPet() {
           border-radius: 20px;
           padding: 4px 10px;
           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-          border: 1px solid #E8D5E0;
+          border: 1px solid #FFE4EC;
         }
         @keyframes thought-pop {
           0% { transform: translateX(-50%) scale(0) translateY(10px); opacity: 0; }
