@@ -50,7 +50,7 @@ export default function ChatPanel() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">
           <Bot className="w-6 h-6 text-blue-500" />
-          <h1 className="text-lg font-semibold">Agent Team Chat</h1>
+          <h1 className="text-lg font-semibold">AI 助理团队</h1>
         </div>
         <button
           onClick={clearMessages}

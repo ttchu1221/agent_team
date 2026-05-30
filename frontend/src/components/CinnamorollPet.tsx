@@ -50,9 +50,9 @@ export default function CinnamorollPet() {
   const posRef = useRef<PetPosition>({ x: 0, y: 0 });
   const stateRef = useRef<PetState>("idle");
   const mouseRef = useRef<PetPosition>({ x: 0, y: 0 });
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
-  const blinkTimerRef = useRef<ReturnType<typeof setInterval>>();
-  const zTimerRef = useRef<ReturnType<typeof setInterval>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const blinkTimerRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const zTimerRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const heartIdRef = useRef(0);
   const dragOffset = useRef<PetPosition>({ x: 0, y: 0 });
 
@@ -305,124 +305,19 @@ export default function CinnamorollPet() {
         onClick={handleClick}
         onMouseDown={handleMouseDown}
       >
-        <svg
-          width="80"
-          height="120"
-          viewBox="0 0 200 300"
-          xmlns="http://www.w3.org/2000/svg"
+        <img
+          src="/yugui.jpg"
+          alt="Pet"
+          width={80}
+          height={80}
+          draggable={false}
           style={{
             filter: isSleeping ? "brightness(0.9) saturate(0.8)" : undefined,
             transition: "filter 0.5s",
+            objectFit: "cover",
+            borderRadius: "50%",
           }}
-        >
-          {/* 左耳 - 超长垂耳，从头顶垂到身体 */}
-          <g
-            className={earFlap ? "ear-flap-left" : ""}
-            style={{ transformOrigin: "70px 100px" }}
-          >
-            <path
-              d="M 65 105 Q 50 70 40 40 Q 35 20 45 15 Q 55 10 58 35 Q 62 60 65 90"
-              fill="white"
-              stroke="#DDD0D8"
-              strokeWidth="1.5"
-            />
-            <path
-              d="M 63 95 Q 52 65 45 40 Q 42 25 50 20 Q 58 18 60 40 Q 62 60 64 85"
-              fill="#FFE4EC"
-              opacity="0.5"
-            />
-          </g>
-
-          {/* 右耳 - 超长垂耳 */}
-          <g
-            className={earFlap ? "ear-flap-right" : ""}
-            style={{ transformOrigin: "130px 100px" }}
-          >
-            <path
-              d="M 135 105 Q 150 70 160 40 Q 165 20 155 15 Q 145 10 142 35 Q 138 60 135 90"
-              fill="white"
-              stroke="#DDD0D8"
-              strokeWidth="1.5"
-            />
-            <path
-              d="M 137 95 Q 148 65 155 40 Q 158 25 150 20 Q 142 18 140 40 Q 138 60 136 85"
-              fill="#FFE4EC"
-              opacity="0.5"
-            />
-          </g>
-
-          {/* 身体 - 白色圆润短小 */}
-          <ellipse cx="100" cy="200" rx="40" ry="45" fill="white" stroke="#DDD0D8" strokeWidth="1.5" />
-
-          {/* 头部 - 大而圆 */}
-          <ellipse cx="100" cy="110" rx="58" ry="52" fill="white" stroke="#DDD0D8" strokeWidth="1.5" />
-
-          {/* 腮红 - 明显的粉红色圆形 */}
-          <ellipse cx="58" cy="120" rx="12" ry="8" fill="#FFB6C1" opacity={isHappy ? "0.9" : "0.7"} />
-          <ellipse cx="142" cy="120" rx="12" ry="8" fill="#FFB6C1" opacity={isHappy ? "0.9" : "0.7"} />
-
-          {/* 眼睛 - 黑色，半月形/弯月形 */}
-          {isSleeping ? (
-            <>
-              {/* 闭眼 - 弯弯的微笑弧线 */}
-              <path d="M 80 108 Q 87 102 94 108" fill="none" stroke="#2D2D2D" strokeWidth="2.5" strokeLinecap="round" />
-              <path d="M 106 108 Q 113 102 120 108" fill="none" stroke="#2D2D2D" strokeWidth="2.5" strokeLinecap="round" />
-            </>
-          ) : isBlinking ? (
-            <>
-              <line x1="80" y1="108" x2="94" y2="108" stroke="#2D2D2D" strokeWidth="2.5" strokeLinecap="round" />
-              <line x1="106" y1="108" x2="120" y2="108" stroke="#2D2D2D" strokeWidth="2.5" strokeLinecap="round" />
-            </>
-          ) : (
-            <>
-              {/* 左眼 - 大而圆，黑色 */}
-              <ellipse cx="87" cy="106" rx="8" ry="9" fill="#2D2D2D" />
-              {/* 高光 */}
-              <ellipse cx="84" cy="103" rx="2.5" ry="3" fill="white" />
-              <ellipse cx="90" cy="108" rx="1.2" ry="1.5" fill="white" opacity="0.6" />
-              
-              {/* 右眼 - 大而圆，黑色 */}
-              <ellipse cx="113" cy="106" rx="8" ry="9" fill="#2D2D2D" />
-              {/* 高光 */}
-              <ellipse cx="110" cy="103" rx="2.5" ry="3" fill="white" />
-              <ellipse cx="116" cy="108" rx="1.2" ry="1.5" fill="white" opacity="0.6" />
-            </>
-          )}
-
-          {/* 鼻子 - 小巧黑色 */}
-          <ellipse cx="100" cy="118" rx="3.5" ry="2.5" fill="#2D2D2D" />
-
-          {/* 嘴巴 - w形或微笑曲线 */}
-          {isHappy ? (
-            <path d="M 93 123 Q 97 128 100 125 Q 103 128 107 123" fill="none" stroke="#2D2D2D" strokeWidth="1.8" strokeLinecap="round" />
-          ) : (
-            <path d="M 95 123 Q 100 127 105 123" fill="none" stroke="#2D2D2D" strokeWidth="1.5" strokeLinecap="round" />
-          )}
-
-          {/* 蝴蝶结 - 蓝色，头顶偏右 */}
-          <g transform="translate(115, 72)">
-            <path d="M -2 0 C -6 -10 -18 -12 -15 -3 C -18 5 -6 7 -2 0" fill="#87CEEB" stroke="#6BB8D6" strokeWidth="1" />
-            <path d="M 2 0 C 6 -10 18 -12 15 -3 C 18 5 6 7 2 0" fill="#87CEEB" stroke="#6BB8D6" strokeWidth="1" />
-            <circle cx="0" cy="0" r="3" fill="#6BB8D6" />
-          </g>
-
-          {/* 小手 - 短小圆润 */}
-          <ellipse cx="65" cy="195" rx="8" ry="6" fill="white" stroke="#DDD0D8" strokeWidth="1.2" transform="rotate(-10, 65, 195)" />
-          <ellipse cx="135" cy="195" rx="8" ry="6" fill="white" stroke="#DDD0D8" strokeWidth="1.2" transform="rotate(10, 135, 195)" />
-
-          {/* 小脚 - 短小圆润 */}
-          <ellipse cx="82" cy="242" rx="14" ry="8" fill="white" stroke="#DDD0D8" strokeWidth="1.2" />
-          <ellipse cx="118" cy="242" rx="14" ry="8" fill="white" stroke="#DDD0D8" strokeWidth="1.2" />
-
-          {/* 尾巴 - 短小绒球状 */}
-          <g className={tailWag ? "tail-wag" : ""} style={{ transformOrigin: "140px 210px" }}>
-            <circle cx="148" cy="208" r="12" fill="white" stroke="#DDD0D8" strokeWidth="1.2" />
-          </g>
-        </svg>
-      </div>
-
-      <div className="text-center mt-0.5">
-        <span className="text-[10px] text-pink-300 font-medium opacity-70">Cinnamoroll</span>
+        />
       </div>
 
       <style jsx>{`
