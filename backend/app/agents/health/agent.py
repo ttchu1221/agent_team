@@ -39,8 +39,7 @@ class HealthAgent(BaseAgent):
     preferred_task_type = "chat"
 
     def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
-        super().__init__(router=router)
-        self.db = db
+        super().__init__(router=router, db=db)
         self.search_tool = SearchTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
@@ -109,7 +108,7 @@ class HealthAgent(BaseAgent):
             result = await self._chat(messages, temperature=0.5)
 
             # 保存到数据库
-            if self.db:
+            if self.db is not None:
                 record_id = str(uuid.uuid4())
                 task = TaskDocument(
                     task_id=record_id,
@@ -168,7 +167,7 @@ class HealthAgent(BaseAgent):
         """分析健康数据"""
         # 从数据库获取健康记录
         records = []
-        if self.db:
+        if self.db is not None:
             query = {}
             if record_type != "all":
                 query["record_type"] = record_type
@@ -225,7 +224,7 @@ class HealthAgent(BaseAgent):
             result = await self._chat(messages, temperature=0.4)
 
             # 存入数据库
-            if self.db:
+            if self.db is not None:
                 goal_id = str(uuid.uuid4())
                 task = TaskDocument(
                     task_id=goal_id,
@@ -249,7 +248,7 @@ class HealthAgent(BaseAgent):
         """生成健康报告"""
         # 从数据库获取健康记录
         records = []
-        if self.db:
+        if self.db is not None:
             cursor = self.db["health_records"].find().sort("created_at", -1).limit(200)
             records = await cursor.to_list(length=200)
 

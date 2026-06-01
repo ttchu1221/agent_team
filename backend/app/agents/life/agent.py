@@ -32,8 +32,7 @@ class LifeAgent(BaseAgent):
     preferred_task_type = "chat"
 
     def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
-        super().__init__(router=router)
-        self.db = db
+        super().__init__(router=router, db=db)
         self.search_tool = SearchTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
@@ -83,7 +82,7 @@ class LifeAgent(BaseAgent):
             result = await self._chat(messages, temperature=0.5)
 
             # 保存到数据库
-            if self.db:
+            if self.db is not None:
                 record_id = str(uuid.uuid4())
                 task = TaskDocument(
                     task_id=record_id,

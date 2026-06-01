@@ -40,8 +40,7 @@ class FinanceAgent(BaseAgent):
     preferred_task_type = "chat"
 
     def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
-        super().__init__(router=router)
-        self.db = db
+        super().__init__(router=router, db=db)
         self.search_tool = SearchTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
@@ -105,7 +104,7 @@ class FinanceAgent(BaseAgent):
             result = await self._chat(messages, temperature=0.5)
 
             # 保存到数据库
-            if self.db:
+            if self.db is not None:
                 record_id = str(uuid.uuid4())
                 task = TaskDocument(
                     task_id=record_id,
@@ -158,7 +157,7 @@ class FinanceAgent(BaseAgent):
         """分析支出趋势"""
         # 从数据库获取交易记录
         transactions = []
-        if self.db:
+        if self.db is not None:
             cursor = self.db["transactions"].find().sort("created_at", -1).limit(100)
             transactions = await cursor.to_list(length=100)
 
@@ -242,7 +241,7 @@ class FinanceAgent(BaseAgent):
         """生成财务报告"""
         # 从数据库获取交易记录
         transactions = []
-        if self.db:
+        if self.db is not None:
             cursor = self.db["transactions"].find().sort("created_at", -1).limit(200)
             transactions = await cursor.to_list(length=200)
 
@@ -269,7 +268,7 @@ class FinanceAgent(BaseAgent):
             result = await self._chat(messages, temperature=0.3)
 
             # 存入数据库
-            if self.db:
+            if self.db is not None:
                 report_id = str(uuid.uuid4())
                 task = TaskDocument(
                     task_id=report_id,
