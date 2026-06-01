@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Agent 工厂 - 创建和管理 Agent 实例"""
+"""Agent 工厂 - 创建和管理 Agent 实例 (数据库 + 搜索集成)"""
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -16,12 +16,12 @@ from app.agents.health.agent import HealthAgent
 from app.core.llm_router import LLMRouter
 
 
-# 需要数据库注入的 Agent 类型
-_AGENTS_WITH_DB = {"life", "study", "finance", "travel", "health"}
+# 所有 Agent 都支持数据库注入（用于任务记录和数据持久化）
+_ALL_AGENTS = {"chief", "career", "research", "life", "study", "finance", "travel", "health"}
 
 
 class AgentFactory:
-    """Agent 工厂 - 根据类型创建 Agent 实例，注入 LLMRouter"""
+    """Agent 工厂 - 根据类型创建 Agent 实例，注入 LLMRouter 和数据库"""
 
     _agent_map: dict[str, type[BaseAgent]] = {
         "chief": ChiefAgent,
@@ -41,14 +41,13 @@ class AgentFactory:
         router: LLMRouter | None = None,
         db: AsyncIOMotorDatabase | None = None,
     ) -> BaseAgent:
-        """创建 Agent 实例"""
+        """创建 Agent 实例，注入数据库连接"""
         agent_class = cls._agent_map.get(agent_type)
         if not agent_class:
             raise ValueError(f"Unknown agent type: {agent_type}")
 
-        if agent_type in _AGENTS_WITH_DB:
-            return agent_class(router=router, db=db)
-        return agent_class(router=router)
+        # 所有 agent 都支持数据库注入
+        return agent_class(router=router, db=db)
 
     @classmethod
     def list_agents(cls) -> list[dict]:

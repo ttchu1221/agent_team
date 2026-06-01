@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-"""Agent 基类 - 通过 LLMRouter 调用模型"""
+"""Agent 基类 - 通过 LLMRouter 调用模型 (支持数据库注入)"""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import structlog
 
 from app.core.llm_router import LLMRouter
+
+if TYPE_CHECKING:
+    from motor.motor_asyncio import AsyncIOMotorDatabase
 
 logger = structlog.get_logger()
 
@@ -30,8 +33,13 @@ class BaseAgent(ABC):
     # 子类可覆盖，指定该 Agent 偏好的任务类型（用于路由）
     preferred_task_type: str | None = None
 
-    def __init__(self, router: LLMRouter | None = None):
+    def __init__(
+        self,
+        router: LLMRouter | None = None,
+        db: AsyncIOMotorDatabase | None = None,
+    ):
         self.router = router
+        self.db = db
 
     @abstractmethod
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:

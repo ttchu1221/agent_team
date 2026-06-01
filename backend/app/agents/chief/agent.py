@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-"""Chief Agent - 任务调度中心"""
+"""Chief Agent - 任务调度中心 (支持数据库)"""
 
 import json
 import uuid
 import structlog
+
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.agents.base import BaseAgent, AgentResult
 from app.models.task import TaskPlan, SubTaskPlan
@@ -21,8 +23,12 @@ CHIEF_AGENT_SYSTEM_PROMPT = """你是一个任务调度专家。你的职责是�
 
 ## 可用Agent：
 - career: 职业发展相关 (求职、简历、面试、JD分析)
-- research: 学术研究相关 (论文、科研日报、文献检索)
+- research: 学术研究相关 (论文、科研日报、文献检索、ArXiv搜索)
 - life: 生活管理相关 (文件、邮件、日程、Todo)
+- study: 学习规划相关 (学习目标、路径规划、资源推荐、进度跟踪)
+- finance: 财务管理相关 (消费记录、支出分析、预算管理、订阅管理)
+- travel: 旅行规划相关 (行程规划、住宿推荐、交通方案、预算估算)
+- health: 健康管理相关 (健康记录、趋势分析、目标追踪、健身计划)
 
 ## 输出格式（严格JSON）：
 {
@@ -46,6 +52,7 @@ CHIEF_AGENT_SYSTEM_PROMPT = """你是一个任务调度专家。你的职责是�
 - 考虑任务间的依赖关系
 - 如果是简单对话（打招呼、闲聊），返回空tasks列表，intent设为"chat"
 - 对于通用问题，可以直接回答，不需要分配给Agent
+- 学术搜索相关任务使用research agent
 """
 
 

@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-"""Career Agent - 职业发展助手"""
+"""Career Agent - 职业发展助手 (数据库 + 搜索集成)"""
 
+import uuid
 import structlog
+from datetime import datetime, timezone
+
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.agents.base import BaseAgent, AgentResult
+from app.models.task import TaskDocument, TaskStatus, AgentType
+from app.tools.search.search import SearchTool
 
 logger = structlog.get_logger()
 
@@ -23,8 +29,13 @@ class CareerAgent(BaseAgent):
     """Career Agent - 职业发展相关任务"""
 
     name = "career"
-    description = "职业发展助手：JD分析、简历优化、面试准备"
+    description = "职业发展助手：JD分析、简历优化、面试准备、职位搜索"
     preferred_task_type = "chat"
+
+    def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
+        super().__init__(router=router)
+        self.db = db
+        self.search_tool = SearchTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
         """执行职业发展相关任务"""
@@ -33,6 +44,8 @@ class CareerAgent(BaseAgent):
 
         if task_type == "jd_analysis":
             return await self._analyze_jd(content)
+        elif task_type == "search_jobs":
+            return await self._search_jobs(content, task_input.get("max_results", 5))
         elif task_type == "resume_optimize":
             resume = task_input.get("resume", "")
             jd = task_input.get("jd", content)
@@ -41,6 +54,57 @@ class CareerAgent(BaseAgent):
             return await self._prepare_interview(content)
         else:
             return await self._general_career_advice(content)
+
+    async def _search_jobs(self, query: str, max_results: int = 5) -> AgentResult:
+        """搜索职位信息（通过论文搜索获取行业趋势）"""
+        try:
+            search_result = await self.search_tool.execute(
+                f"{query} job market career", max_results=max_results
+            )
+
+            if not search_result.success:
+                return AgentResult(success=False, error=search_result.error)
+
+            papers = search_result.data
+            papers_text = "\n".join([
+                f"- {p['title']} ({p.get('year', 'N/A')})"
+                for p in papers
+            ])
+
+            messages = [
+                {"role": "system", "content": CAREER_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"""根据以下搜索结果，分析 "{query}" 相关的职业市场：
+
+{papers_text}
+
+请提供：
+1. **行业趋势** - 该领域的发展趋势
+2. **热门技能** - 当前市场需求的技能
+3. **薪资参考** - 薪资范围估算
+4. **求职建议** - 如何进入该领域""",
+                },
+            ]
+
+            result = await self._chat(messages, temperature=0.5)
+
+            # 保存到数据库
+            if self.db:
+                record_id = str(uuid.uuid4())
+                task = TaskDocument(
+                    task_id=record_id,
+                    user_input=query,
+                    agent_type=AgentType.CAREER,
+                    status=TaskStatus.COMPLETED,
+                    result=result,
+                    description=f"[职位搜索] {query}",
+                )
+                await self.db["tasks"].insert_one(task.model_dump())
+
+            return AgentResult(success=True, data=result)
+        except Exception as e:
+            return AgentResult(success=False, error=str(e))
 
     async def _analyze_jd(self, jd_text: str) -> AgentResult:
         """分析职位描述"""
@@ -62,6 +126,20 @@ class CareerAgent(BaseAgent):
 
         try:
             result = await self._chat(messages, temperature=0.5)
+
+            # 保存到数据库
+            if self.db:
+                record_id = str(uuid.uuid4())
+                task = TaskDocument(
+                    task_id=record_id,
+                    user_input=jd_text[:100],
+                    agent_type=AgentType.CAREER,
+                    status=TaskStatus.COMPLETED,
+                    result=result,
+                    description=f"[JD分析] {jd_text[:50]}...",
+                )
+                await self.db["tasks"].insert_one(task.model_dump())
+
             return AgentResult(success=True, data=result)
         except Exception as e:
             return AgentResult(success=False, error=str(e))

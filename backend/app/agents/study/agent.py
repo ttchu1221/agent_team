@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Study Agent - 学习规划助手"""
+"""Study Agent - 学习规划助手 (数据库 + 搜索集成)"""
 
 import uuid
 import structlog
@@ -10,6 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.agents.base import BaseAgent, AgentResult
 from app.models.task import TaskDocument, TaskStatus, AgentType
+from app.tools.search.search import SearchTool
 
 logger = structlog.get_logger()
 
@@ -33,12 +34,13 @@ class StudyAgent(BaseAgent):
     """Study Agent - 学习规划相关任务"""
 
     name = "study"
-    description = "学习规划助手：目标拆解、路径规划、资源推荐、进度跟踪"
+    description = "学习规划助手：目标拆解、路径规划、资源推荐、进度跟踪、学习资料搜索"
     preferred_task_type = "chat"
 
     def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
         super().__init__(router=router)
         self.db = db
+        self.search_tool = SearchTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
         """执行学习规划相关任务"""
@@ -53,12 +55,64 @@ class StudyAgent(BaseAgent):
             )
         elif task_type == "decompose_goal":
             return await self._decompose_goal(content)
+        elif task_type == "search_resources":
+            return await self._search_resources(content, task_input.get("max_results", 5))
         elif task_type == "recommend_resources":
             return await self._recommend_resources(content)
         elif task_type == "review":
             return await self._generate_review(content)
         else:
             return await self._general_study(content)
+
+    async def _search_resources(self, topic: str, max_results: int = 5) -> AgentResult:
+        """搜索学习资源"""
+        try:
+            search_result = await self.search_tool.execute(
+                f"{topic} tutorial learning", max_results=max_results
+            )
+
+            if not search_result.success:
+                return AgentResult(success=False, error=search_result.error)
+
+            papers = search_result.data
+            papers_text = "\n".join([
+                f"- {p['title']} ({p.get('year', 'N/A')}) - {', '.join(p['authors'][:2])}"
+                for p in papers
+            ])
+
+            messages = [
+                {"role": "system", "content": STUDY_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"""根据搜索结果，为 "{topic}" 推荐学习资源：
+
+{papers_text}
+
+请分析这些资源并提供：
+1. **推荐学习路径** - 建议的学习顺序
+2. **重点资源** - 最值得学习的资源
+3. **学习建议** - 如何高效学习""",
+                },
+            ]
+
+            result = await self._chat(messages, temperature=0.5)
+
+            # 保存到数据库
+            if self.db:
+                record_id = str(uuid.uuid4())
+                task = TaskDocument(
+                    task_id=record_id,
+                    user_input=topic,
+                    agent_type=AgentType.STUDY,
+                    status=TaskStatus.COMPLETED,
+                    result=result,
+                    description=f"[资源搜索] {topic}",
+                )
+                await self.db["tasks"].insert_one(task.model_dump())
+
+            return AgentResult(success=True, data=result)
+        except Exception as e:
+            return AgentResult(success=False, error=str(e))
 
     async def _create_learning_plan(
         self, goal: str, level: str = "beginner", hours_per_week: int = 10

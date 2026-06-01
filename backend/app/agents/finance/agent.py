@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Finance Agent - 财务管理助手"""
+"""Finance Agent - 财务管理助手 (数据库 + 搜索集成)"""
 
 import uuid
 import structlog
@@ -11,6 +11,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.agents.base import BaseAgent, AgentResult
 from app.models.task import TaskDocument, TaskStatus, AgentType
+from app.tools.search.search import SearchTool
 
 logger = structlog.get_logger()
 
@@ -35,12 +36,13 @@ class FinanceAgent(BaseAgent):
     """Finance Agent - 财务管理相关任务"""
 
     name = "finance"
-    description = "财务管理助手：消费记录、支出分析、预算管理、订阅管理"
+    description = "财务管理助手：消费记录、支出分析、预算管理、订阅管理、财务资讯搜索"
     preferred_task_type = "chat"
 
     def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
         super().__init__(router=router)
         self.db = db
+        self.search_tool = SearchTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
         """执行财务管理相关任务"""
@@ -58,6 +60,8 @@ class FinanceAgent(BaseAgent):
                 content,
                 task_input.get("period", "month"),
             )
+        elif task_type == "search_finance":
+            return await self._search_finance(content, task_input.get("max_results", 5))
         elif task_type == "set_budget":
             return await self._set_budget(content)
         elif task_type == "manage_subscriptions":
@@ -66,6 +70,56 @@ class FinanceAgent(BaseAgent):
             return await self._generate_report(content)
         else:
             return await self._general_finance(content)
+
+    async def _search_finance(self, topic: str, max_results: int = 5) -> AgentResult:
+        """搜索财务相关资讯"""
+        try:
+            search_result = await self.search_tool.execute(
+                f"{topic} finance investment", max_results=max_results
+            )
+
+            if not search_result.success:
+                return AgentResult(success=False, error=search_result.error)
+
+            papers = search_result.data
+            papers_text = "\n".join([
+                f"- {p['title']} ({p.get('year', 'N/A')})"
+                for p in papers
+            ])
+
+            messages = [
+                {"role": "system", "content": FINANCE_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"""根据搜索结果，分析 "{topic}" 相关的财务信息：
+
+{papers_text}
+
+请提供：
+1. **市场趋势** - 当前市场状况
+2. **投资建议** - 基于分析的建议
+3. **风险提示** - 需要注意的风险""",
+                },
+            ]
+
+            result = await self._chat(messages, temperature=0.5)
+
+            # 保存到数据库
+            if self.db:
+                record_id = str(uuid.uuid4())
+                task = TaskDocument(
+                    task_id=record_id,
+                    user_input=topic,
+                    agent_type=AgentType.FINANCE,
+                    status=TaskStatus.COMPLETED,
+                    result=result,
+                    description=f"[财务搜索] {topic}",
+                )
+                await self.db["tasks"].insert_one(task.model_dump())
+
+            return AgentResult(success=True, data=result)
+        except Exception as e:
+            return AgentResult(success=False, error=str(e))
 
     async def _add_transaction(
         self, description: str, amount: float, category: str = "其他"

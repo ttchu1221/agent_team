@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-"""Research Agent - 学术研究助手"""
+"""Research Agent - 学术研究助手 (数据库 + 搜索集成)"""
 
+import uuid
 import structlog
-from datetime import datetime
+from datetime import datetime, timezone
+
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.agents.base import BaseAgent, AgentResult
+from app.models.task import TaskDocument, TaskStatus, AgentType
+from app.tools.search.search import SearchTool
 
 logger = structlog.get_logger()
 
@@ -23,8 +28,13 @@ class ResearchAgent(BaseAgent):
     """Research Agent - 学术研究相关任务"""
 
     name = "research"
-    description = "学术研究助手：论文摘要、科研日报、文献分析"
+    description = "学术研究助手：论文搜索、论文摘要、科研日报、文献分析"
     preferred_task_type = "reasoning"
+
+    def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
+        super().__init__(router=router)
+        self.db = db
+        self.search_tool = SearchTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
         """执行学术研究相关任务"""
@@ -33,6 +43,8 @@ class ResearchAgent(BaseAgent):
 
         if task_type == "paper_summary":
             return await self._summarize_paper(content)
+        elif task_type == "search_papers":
+            return await self._search_papers(content, task_input.get("max_results", 5))
         elif task_type == "research_daily":
             topic = task_input.get("topic", content)
             return await self._generate_research_daily(topic)
@@ -42,6 +54,69 @@ class ResearchAgent(BaseAgent):
             return await self._generate_ideas(content)
         else:
             return await self._general_research(content)
+
+    async def _search_papers(self, query: str, max_results: int = 5) -> AgentResult:
+        """搜索学术论文"""
+        try:
+            search_result = await self.search_tool.execute(query, max_results=max_results)
+
+            if not search_result.success:
+                return AgentResult(success=False, error=search_result.error)
+
+            papers = search_result.data
+
+            # 格式化搜索结果
+            papers_text = "\n\n".join([
+                f"**{i+1}. {p['title']}**\n"
+                f"- 作者: {', '.join(p['authors'][:3])}\n"
+                f"- 年份: {p.get('year', 'N/A')}\n"
+                f"- 引用: {p.get('citation_count', 0)}\n"
+                f"- DOI: {p.get('doi', p.get('arxiv_id', 'N/A'))}\n"
+                f"- 摘要: {p.get('abstract', '')[:200]}..."
+                for i, p in enumerate(papers)
+            ])
+
+            messages = [
+                {"role": "system", "content": RESEARCH_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"""我搜索了 "{query}"，找到以下论文：
+
+{papers_text}
+
+请对这些论文进行简要分析：
+1. **研究趋势** - 这些论文反映了什么研究趋势
+2. **关键发现** - 主要研究成果
+3. **研究空白** - 可能的研究空白
+4. **推荐阅读** - 最值得阅读的论文及原因""",
+                },
+            ]
+
+            analysis = await self._chat(messages, temperature=0.5)
+
+            # 保存到数据库
+            if self.db:
+                record_id = str(uuid.uuid4())
+                task = TaskDocument(
+                    task_id=record_id,
+                    user_input=query,
+                    agent_type=AgentType.RESEARCH,
+                    status=TaskStatus.COMPLETED,
+                    result=analysis,
+                    description=f"[论文搜索] {query}",
+                )
+                await self.db["tasks"].insert_one(task.model_dump())
+
+            return AgentResult(
+                success=True,
+                data={
+                    "papers": papers,
+                    "analysis": analysis,
+                },
+                metadata={"query": query, "paper_count": len(papers)},
+            )
+        except Exception as e:
+            return AgentResult(success=False, error=str(e))
 
     async def _summarize_paper(self, paper_content: str) -> AgentResult:
         """生成论文摘要"""
@@ -84,8 +159,19 @@ class ResearchAgent(BaseAgent):
             return AgentResult(success=False, error=str(e))
 
     async def _generate_research_daily(self, topic: str) -> AgentResult:
-        """生成科研日报"""
+        """生成科研日报（集成搜索）"""
         today = datetime.now().strftime("%Y-%m-%d")
+
+        # 先搜索最新论文
+        search_result = await self.search_tool.execute(topic, max_results=5)
+        papers_context = ""
+        if search_result.success and search_result.data:
+            papers_list = "\n".join([
+                f"- {p['title']} ({p.get('year', 'N/A')}, 引用: {p.get('citation_count', 0)})"
+                for p in search_result.data
+            ])
+            papers_context = f"\n\n最新相关论文:\n{papers_list}"
+
         messages = [
             {"role": "system", "content": RESEARCH_SYSTEM_PROMPT},
             {
@@ -93,15 +179,16 @@ class ResearchAgent(BaseAgent):
                 "content": f"""请围绕以下研究主题，生成一份科研日报（日期：{today}）：
 
 **研究主题**: {topic}
+{papers_context}
 
 请按以下格式输出：
 # 🔬 科研日报 - {today}
 
 ## 📌 今日焦点
-（今天最值得关注的研究动态）
+（基于搜索结果，最值得关注的研究动态）
 
 ## 📚 推荐阅读
-（推荐3-5篇相关论文/文章，包含简要说明）
+（推荐3-5篇相关论文，包含简要说明）
 
 ## 💡 研究灵感
 （基于当前进展的2-3个研究想法）
@@ -116,7 +203,11 @@ class ResearchAgent(BaseAgent):
 
         try:
             result = await self._chat(messages, temperature=0.6)
-            return AgentResult(success=True, data=result)
+            return AgentResult(
+                success=True,
+                data=result,
+                metadata={"topic": topic, "papers_found": len(search_result.data) if search_result.success else 0},
+            )
         except Exception as e:
             return AgentResult(success=False, error=str(e))
 

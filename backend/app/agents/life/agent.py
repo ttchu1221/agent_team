@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Life Agent - 生活管理助手 (MongoDB 版)"""
+"""Life Agent - 生活管理助手 (MongoDB + 搜索集成)"""
 
 import uuid
 import structlog
@@ -10,6 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.agents.base import BaseAgent, AgentResult
 from app.models.task import TaskDocument, TaskStatus, AgentType
+from app.tools.search.search import SearchTool
 
 logger = structlog.get_logger()
 
@@ -27,12 +28,13 @@ class LifeAgent(BaseAgent):
     """Life Agent - 生活管理相关任务"""
 
     name = "life"
-    description = "生活管理助手：Todo管理、文件整理、日程安排"
+    description = "生活管理助手：Todo管理、文件整理、日程安排、信息搜索"
     preferred_task_type = "chat"
 
     def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
         super().__init__(router=router)
         self.db = db
+        self.search_tool = SearchTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
         """执行生活管理相关任务"""
@@ -43,12 +45,59 @@ class LifeAgent(BaseAgent):
             return await self._create_todo(content, task_input.get("priority", "medium"))
         elif task_type == "todo_list":
             return await self._list_todos()
+        elif task_type == "search_info":
+            return await self._search_info(content, task_input.get("max_results", 5))
         elif task_type == "file_organize":
             return await self._organize_files(content)
         elif task_type == "schedule":
             return await self._plan_schedule(content)
         else:
             return await self._general_life(content)
+
+    async def _search_info(self, query: str, max_results: int = 5) -> AgentResult:
+        """搜索生活相关信息"""
+        try:
+            search_result = await self.search_tool.execute(query, max_results=max_results)
+
+            if not search_result.success:
+                return AgentResult(success=False, error=search_result.error)
+
+            papers = search_result.data
+            papers_text = "\n".join([
+                f"- {p['title']} ({p.get('year', 'N/A')})"
+                for p in papers
+            ])
+
+            messages = [
+                {"role": "system", "content": LIFE_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"""根据搜索结果，回答关于 "{query}" 的问题：
+
+{papers_text}
+
+请提供实用的建议和信息。""",
+                },
+            ]
+
+            result = await self._chat(messages, temperature=0.5)
+
+            # 保存到数据库
+            if self.db:
+                record_id = str(uuid.uuid4())
+                task = TaskDocument(
+                    task_id=record_id,
+                    user_input=query,
+                    agent_type=AgentType.LIFE,
+                    status=TaskStatus.COMPLETED,
+                    result=result,
+                    description=f"[信息搜索] {query}",
+                )
+                await self.db["tasks"].insert_one(task.model_dump())
+
+            return AgentResult(success=True, data=result)
+        except Exception as e:
+            return AgentResult(success=False, error=str(e))
 
     async def _create_todo(self, content: str, priority: str = "medium") -> AgentResult:
         """创建Todo项 - 存入 MongoDB"""

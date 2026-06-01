@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Travel Agent - 旅行规划助手"""
+"""Travel Agent - 旅行规划助手 (数据库 + 搜索集成)"""
 
 import uuid
 import structlog
@@ -10,6 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.agents.base import BaseAgent, AgentResult
 from app.models.task import TaskDocument, TaskStatus, AgentType
+from app.tools.search.search import SearchTool
 
 logger = structlog.get_logger()
 
@@ -34,12 +35,13 @@ class TravelAgent(BaseAgent):
     """Travel Agent - 旅行规划相关任务"""
 
     name = "travel"
-    description = "旅行规划助手：行程规划、住宿推荐、交通方案、预算估算"
+    description = "旅行规划助手：行程规划、住宿推荐、交通方案、预算估算、目的地搜索"
     preferred_task_type = "chat"
 
     def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
         super().__init__(router=router)
         self.db = db
+        self.search_tool = SearchTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
         """执行旅行规划相关任务"""
@@ -53,6 +55,8 @@ class TravelAgent(BaseAgent):
                 task_input.get("budget", "medium"),
                 task_input.get("travelers", 1),
             )
+        elif task_type == "search_destination":
+            return await self._search_destination(content, task_input.get("max_results", 5))
         elif task_type == "destination_info":
             return await self._get_destination_info(content)
         elif task_type == "accommodation":
@@ -70,6 +74,57 @@ class TravelAgent(BaseAgent):
             )
         else:
             return await self._general_travel(content)
+
+    async def _search_destination(self, destination: str, max_results: int = 5) -> AgentResult:
+        """搜索目的地信息"""
+        try:
+            search_result = await self.search_tool.execute(
+                f"{destination} travel tourism", max_results=max_results
+            )
+
+            if not search_result.success:
+                return AgentResult(success=False, error=search_result.error)
+
+            papers = search_result.data
+            papers_text = "\n".join([
+                f"- {p['title']} ({p.get('year', 'N/A')})"
+                for p in papers
+            ])
+
+            messages = [
+                {"role": "system", "content": TRAVEL_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"""根据搜索结果，介绍 "{destination}" 的旅游信息：
+
+{papers_text}
+
+请提供：
+1. **目的地亮点** - 最值得去的景点
+2. **最佳旅行时间** - 推荐的旅行季节
+3. **特色体验** - 当地特色活动
+4. **实用信息** - 签证、货币、语言等""",
+                },
+            ]
+
+            result = await self._chat(messages, temperature=0.5)
+
+            # 保存到数据库
+            if self.db:
+                record_id = str(uuid.uuid4())
+                task = TaskDocument(
+                    task_id=record_id,
+                    user_input=destination,
+                    agent_type=AgentType.TRAVEL,
+                    status=TaskStatus.COMPLETED,
+                    result=result,
+                    description=f"[目的地搜索] {destination}",
+                )
+                await self.db["tasks"].insert_one(task.model_dump())
+
+            return AgentResult(success=True, data=result)
+        except Exception as e:
+            return AgentResult(success=False, error=str(e))
 
     async def _plan_trip(
         self,

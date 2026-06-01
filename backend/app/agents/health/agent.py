@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Health Agent - 健康管理助手"""
+"""Health Agent - 健康管理助手 (数据库 + 搜索集成)"""
 
 import uuid
 import structlog
@@ -10,6 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.agents.base import BaseAgent, AgentResult
 from app.models.task import TaskDocument, TaskStatus, AgentType
+from app.tools.search.search import SearchTool
 
 logger = structlog.get_logger()
 
@@ -34,12 +35,13 @@ class HealthAgent(BaseAgent):
     """Health Agent - 健康管理相关任务"""
 
     name = "health"
-    description = "健康管理助手：健康记录、趋势分析、目标追踪、健康报告"
+    description = "健康管理助手：健康记录、趋势分析、目标追踪、健康报告、医疗信息搜索"
     preferred_task_type = "chat"
 
     def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
         super().__init__(router=router)
         self.db = db
+        self.search_tool = SearchTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
         """执行健康管理相关任务"""
@@ -58,6 +60,8 @@ class HealthAgent(BaseAgent):
                 content,
                 task_input.get("record_type", "all"),
             )
+        elif task_type == "search_health":
+            return await self._search_health(content, task_input.get("max_results", 5))
         elif task_type == "set_goal":
             return await self._set_health_goal(content)
         elif task_type == "report":
@@ -68,6 +72,58 @@ class HealthAgent(BaseAgent):
             return await self._analyze_nutrition(content)
         else:
             return await self._general_health(content)
+
+    async def _search_health(self, topic: str, max_results: int = 5) -> AgentResult:
+        """搜索健康相关信息"""
+        try:
+            search_result = await self.search_tool.execute(
+                f"{topic} health medical", max_results=max_results
+            )
+
+            if not search_result.success:
+                return AgentResult(success=False, error=search_result.error)
+
+            papers = search_result.data
+            papers_text = "\n".join([
+                f"- {p['title']} ({p.get('year', 'N/A')})"
+                for p in papers
+            ])
+
+            messages = [
+                {"role": "system", "content": HEALTH_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"""根据搜索结果，回答关于 "{topic}" 的健康问题：
+
+{papers_text}
+
+请提供：
+1. **科学依据** - 基于研究的结论
+2. **实用建议** - 可执行的健康建议
+3. **注意事项** - 需要注意的风险
+
+⚠️ 请提醒用户：如有健康问题请咨询专业医生。""",
+                },
+            ]
+
+            result = await self._chat(messages, temperature=0.5)
+
+            # 保存到数据库
+            if self.db:
+                record_id = str(uuid.uuid4())
+                task = TaskDocument(
+                    task_id=record_id,
+                    user_input=topic,
+                    agent_type=AgentType.HEALTH,
+                    status=TaskStatus.COMPLETED,
+                    result=result,
+                    description=f"[健康搜索] {topic}",
+                )
+                await self.db["tasks"].insert_one(task.model_dump())
+
+            return AgentResult(success=True, data=result)
+        except Exception as e:
+            return AgentResult(success=False, error=str(e))
 
     async def _add_health_record(
         self,
