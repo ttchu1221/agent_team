@@ -3,12 +3,17 @@
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
 from functools import lru_cache
+from pathlib import Path
+
+# 项目根目录（agent_team/backend）
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_ENV_FILE = _BACKEND_DIR / ".env"
 
 
 class Settings(BaseSettings):
     """应用配置"""
 
-    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = ConfigDict(env_file=str(_ENV_FILE), env_file_encoding="utf-8")
 
     # 核心配置
     APP_ENV: str = "development"
