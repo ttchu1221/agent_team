@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import structlog
 from dataclasses import dataclass, field
+from typing import AsyncIterator
 from openai import AsyncOpenAI
 
 logger = structlog.get_logger()
@@ -161,6 +162,40 @@ class LLMRouter:
 
         raise RuntimeError(f"所有 LLM 提供商均调用失败 (tried: {list(tried)})")
 
+    async def stream_chat(
+        self,
+        messages: list[dict],
+        task_type: str | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        temperature: float = 0.7,
+    ) -> AsyncIterator[str]:
+        """
+        流式聊天 - 逐 token 返回内容
+
+        与 chat() 相同的路由逻辑，但返回 AsyncIterator[str] 而非完整字符串。
+        仅尝试首选提供商（不降级，避免流式中断）。
+        """
+        prov_name, model_name, _ = self.resolve(task_type, provider, model)
+        client = self._get_client(prov_name)
+
+        try:
+            stream = await client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                temperature=temperature,
+                stream=True,
+            )
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    yield delta.content
+        except Exception as e:
+            logger.error("stream_chat_failed", provider=prov_name, model=model_name, error=str(e))
+            yield f"\n[流式输出错误: {e}]"
+
     async def chat_json(
         self,
         messages: list[dict],
@@ -205,6 +240,15 @@ class LLMRouter:
         }
 
 
+def _is_placeholder_key(api_key: str) -> bool:
+    """检测 API Key 是否为占位符（未填写的真实密钥）"""
+    _PLACEHOLDER_PATTERNS = (
+        "your-", "xxx", "placeholder", "sk-xxx", "replace",
+    )
+    key_lower = api_key.strip().lower()
+    return any(pat in key_lower for pat in _PLACEHOLDER_PATTERNS)
+
+
 def build_router_from_settings(settings) -> LLMRouter:
     """从 Settings 构建 LLMRouter 实例"""
 
@@ -235,16 +279,19 @@ def build_router_from_settings(settings) -> LLMRouter:
         models_str = getattr(settings, f"{prefix}_MODELS", "")
         models = [m.strip() for m in models_str.split(",") if m.strip()]
 
+        is_placeholder = bool(api_key) and _is_placeholder_key(api_key)
         providers[name] = LLMProvider(
             name=name,
             api_key=api_key,
             base_url=base_url,
             models=models,
-            enabled=bool(api_key),
+            enabled=bool(api_key) and not is_placeholder,
         )
 
         if not api_key:
             logger.warning("provider_no_api_key", name=name, prefix=prefix)
+        elif is_placeholder:
+            logger.warning("provider_placeholder_key", name=name, prefix=prefix)
 
     # 解析路由规则
     routes: dict[str, LLMRoute] = {}

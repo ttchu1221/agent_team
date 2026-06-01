@@ -30,6 +30,13 @@ CHIEF_AGENT_SYSTEM_PROMPT = """你是一个任务调度专家。你的职责是�
 - travel: 旅行规划相关 (行程规划、住宿推荐、交通方案、预算估算)
 - health: 健康管理相关 (健康记录、趋势分析、目标追踪、健身计划)
 
+## Obsidian 笔记保存：
+当用户提到"保存到Obsidian"、"存到笔记"、"写入笔记"、"记录到Obsidian"等类似表述时，
+需要在对应任务的 inputs 中添加以下字段：
+- "save_to_obsidian": true
+- "obsidian_title": "笔记标题"
+- "obsidian_tags": ["相关标签1", "标签2"]
+
 ## 输出格式（严格JSON）：
 {
   "intent": "用户的核心意图",
@@ -53,6 +60,7 @@ CHIEF_AGENT_SYSTEM_PROMPT = """你是一个任务调度专家。你的职责是�
 - 如果是简单对话（打招呼、闲聊），返回空tasks列表，intent设为"chat"
 - 对于通用问题，可以直接回答，不需要分配给Agent
 - 学术搜索相关任务使用research agent
+- 用户要求保存到Obsidian时，务必在inputs中设置save_to_obsidian相关字段
 """
 
 
@@ -84,10 +92,9 @@ class ChiefAgent(BaseAgent):
         try:
             result = await self._structured_chat(messages)
 
-            # 为没有 ID 的任务生成 UUID
+            # 始终用 UUID 覆盖 LLM 生成的可预测 ID，避免数据库主键冲突
             for task in result.get("tasks", []):
-                if not task.get("id"):
-                    task["id"] = f"task_{uuid.uuid4().hex[:8]}"
+                task["id"] = f"task_{uuid.uuid4().hex[:8]}"
 
             plan = TaskPlan(
                 intent=result.get("intent", "unknown"),

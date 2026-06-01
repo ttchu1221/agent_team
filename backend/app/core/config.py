@@ -30,14 +30,14 @@ class Settings(BaseSettings):
 
     # ====== LLM 多模型配置 ======
     LLM_PROVIDERS: str = "qwen,deepseek,xiaomi,moonshot,zhipu,openai"
-    LLM_DEFAULT_PROVIDER: str = "qwen"
-    LLM_DEFAULT_MODEL: str = "qwen-plus"
+    LLM_DEFAULT_PROVIDER: str = "xiaomi"
+    LLM_DEFAULT_MODEL: str = "mimo-v2.5-pro"
 
     # 任务路由
-    LLM_ROUTE_REASONING: str = "deepseek:deepseek-reasoner"
-    LLM_ROUTE_CODE: str = "deepseek:deepseek-coder"
-    LLM_ROUTE_CHAT: str = "qwen:qwen-turbo"
-    LLM_ROUTE_SIMPLE: str = "qwen:qwen-turbo"
+    LLM_ROUTE_REASONING: str = "xiaomi:mimo-v2.5-pro"
+    LLM_ROUTE_CODE: str = "xiaomi:mimo-v2.5-pro"
+    LLM_ROUTE_CHAT: str = "xiaomi:mimo-v2.5-pro"
+    LLM_ROUTE_SIMPLE: str = "xiaomi:mimo-v2.5-pro"
 
     # ---- Qwen (通义千问) ----
     QWEN_API_KEY: str = ""
@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     # ---- Xiaomi (小米大模型) ----
     XIAOMI_API_KEY: str = ""
     XIAOMI_BASE_URL: str = "https://token-plan-cn.xiaomimimo.com/v1"
-    XIAOMI_MODELS: str = "mimo-v2.5-pro,MiLM-v2-flash"
+    XIAOMI_MODELS: str = "mimo-v2.5-pro"
 
     # ---- Moonshot (月之暗面 / Kimi) ----
     MOONSHOT_API_KEY: str = ""

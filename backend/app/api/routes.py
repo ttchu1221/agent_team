@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import uuid
 import asyncio
+import json
 from typing import Optional
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from app.core.database import get_database
 from app.core.scheduler import TaskScheduler
 from app.core.memory import MemorySystem
 from app.agents.factory import AgentFactory
 from app.agents.base import AgentResult
-from app.models.task import TaskStatus, ChatRequest, ChatResponse, TaskResponse, TaskListResponse
+from app.models.task import TaskStatus, ChatRequest, ChatResponse, TaskResponse, TaskListResponse, TaskPlan
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -67,31 +69,28 @@ async def chat(request: ChatRequest):
 
     # 如果没有子任务（简单对话），直接回复
     if not tasks:
-        intent = plan_data.get("intent", "chat")
-        if intent in ("chat", "greeting", "general"):
-            # 构建增强提示
-            system_parts = ["你是一个友好的AI助手。请简洁地回复用户。"]
-            if profile_context:
-                system_parts.append(profile_context)
-            if memory_context:
-                system_parts.append(memory_context)
+        system_parts = ["你是一个友好的AI助手。请简洁地回复用户。"]
+        if profile_context:
+            system_parts.append(profile_context)
+        if memory_context:
+            system_parts.append(memory_context)
 
-            messages = [
-                {"role": "system", "content": "\n\n".join(system_parts)},
-                *[{"role": m["role"], "content": m["content"]} for m in history[-6:]],
-            ]
-            reply = await llm_router.chat(messages=messages, task_type="chat")
-            await memory.save_message(session_id, "assistant", reply)
+        messages = [
+            {"role": "system", "content": "\n\n".join(system_parts)},
+            *[{"role": m["role"], "content": m["content"]} for m in history[-6:]],
+        ]
+        reply = await llm_router.chat(messages=messages, task_type="chat")
+        await memory.save_message(session_id, "assistant", reply)
 
-            # 异步提取记忆和更新画像（不阻塞响应）
-            asyncio.create_task(
-                _post_chat_memory_update(memory, session_id, request.message, reply)
-            )
+        asyncio.create_task(
+            _post_chat_memory_update(memory, session_id, request.message, reply)
+        )
 
-            return ChatResponse(reply=reply, session_id=session_id)
+        return ChatResponse(reply=reply, session_id=session_id)
 
     # 有子任务 -> 创建并执行
-    created_tasks = await scheduler.create_task_from_plan(request.message, plan_data)
+    plan = TaskPlan(**plan_data)
+    created_tasks = await scheduler.create_task_from_plan(request.message, plan)
 
     if not created_tasks:
         raise HTTPException(status_code=500, detail="任务创建失败")
@@ -111,8 +110,14 @@ async def chat(request: ChatRequest):
         "profile_context": profile_context,
     }
 
+    # 构造结构化 task_input（Agent 期望 dict）
+    first_subtask = plan.tasks[0] if plan.tasks else None
+    task_input = {"content": first_task.description, "task_type": "general"}
+    if first_subtask and first_subtask.inputs:
+        task_input.update(first_subtask.inputs)
+
     result: AgentResult = await agent.execute(
-        task_input=first_task.description,
+        task_input=task_input,
         context=agent_context,
     )
 
@@ -121,6 +126,10 @@ async def chat(request: ChatRequest):
             first_task.task_id, TaskStatus.COMPLETED, result=str(result.data)
         )
         reply = str(result.data)
+        # 如果有 Obsidian 保存结果，追加提示
+        if result.metadata and result.metadata.get("obsidian"):
+            obsidian_info = result.metadata["obsidian"]
+            reply += f"\n\n✅ 已保存到 Obsidian: `{obsidian_info.get('path', '')}`"
     else:
         await scheduler.update_task_status(
             first_task.task_id, TaskStatus.FAILED, error=result.error
@@ -139,6 +148,128 @@ async def chat(request: ChatRequest):
         task_id=first_task.task_id,
         session_id=session_id,
     )
+
+
+@router.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """
+    流式聊天入口 - SSE 逐 token 返回
+
+    简单对话: 流式输出 LLM 回复
+    复杂任务: 执行后一次性返回结果
+    """
+    db = get_database()
+    llm_router = _get_router()
+    session_id = request.session_id or str(uuid.uuid4())
+    memory = MemorySystem(db, llm_router=llm_router)
+    scheduler = TaskScheduler(db)
+
+    await memory.save_message(session_id, "user", request.message)
+    history = await memory.get_context_window(session_id)
+    memory_context = await memory.get_memory_context(request.message, limit=3)
+    profile_context = await memory.get_profile_context()
+
+    # Chief Agent 解析意图
+    chief = AgentFactory.create("chief", router=llm_router)
+    plan_result = await chief.execute({
+        "message": request.message,
+        "history": history[:-1],
+    })
+
+    if not plan_result.success:
+        async def error_stream():
+            yield _sse({"type": "error", "content": plan_result.error})
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
+
+    plan_data = plan_result.data
+    tasks = plan_data.get("tasks", [])
+
+    # 简单对话 → 流式输出
+    if not tasks:
+        system_parts = ["你是一个友好的AI助手。请简洁地回复用户。"]
+        if profile_context:
+            system_parts.append(profile_context)
+        if memory_context:
+            system_parts.append(memory_context)
+
+        messages = [
+            {"role": "system", "content": "\n\n".join(system_parts)},
+            *[{"role": m["role"], "content": m["content"]} for m in history[-6:]],
+        ]
+
+        async def simple_stream():
+            full_reply = []
+            yield _sse({"type": "session", "session_id": session_id})
+            async for chunk in llm_router.stream_chat(messages=messages, task_type="chat"):
+                full_reply.append(chunk)
+                yield _sse({"type": "delta", "content": chunk})
+            complete_reply = "".join(full_reply)
+            await memory.save_message(session_id, "assistant", complete_reply)
+            asyncio.create_task(
+                _post_chat_memory_update(memory, session_id, request.message, complete_reply)
+            )
+            yield _sse({"type": "done", "session_id": session_id})
+
+        return StreamingResponse(simple_stream(), media_type="text/event-stream")
+
+    # 复杂任务 → 执行后一次性返回
+    plan = TaskPlan(**plan_data)
+    created_tasks = await scheduler.create_task_from_plan(request.message, plan)
+    if not created_tasks:
+        async def err():
+            yield _sse({"type": "error", "content": "任务创建失败"})
+        return StreamingResponse(err(), media_type="text/event-stream")
+
+    first_task = created_tasks[0]
+    agent = AgentFactory.create(first_task.agent_type.value, router=llm_router, db=db)
+    await scheduler.update_task_status(first_task.task_id, TaskStatus.RUNNING)
+
+    agent_context = {
+        "session_id": session_id,
+        "history": history,
+        "memory_context": memory_context,
+        "profile_context": profile_context,
+    }
+
+    first_subtask = plan.tasks[0] if plan.tasks else None
+    task_input = {"content": first_task.description, "task_type": "general"}
+    if first_subtask and first_subtask.inputs:
+        task_input.update(first_subtask.inputs)
+
+    result: AgentResult = await agent.execute(task_input=task_input, context=agent_context)
+
+    if result.success:
+        await scheduler.update_task_status(
+            first_task.task_id, TaskStatus.COMPLETED, result=str(result.data)
+        )
+        reply = str(result.data)
+        # 如果有 Obsidian 保存结果，追加提示
+        if result.metadata and result.metadata.get("obsidian"):
+            obsidian_info = result.metadata["obsidian"]
+            reply += f"\n\n✅ 已保存到 Obsidian: `{obsidian_info.get('path', '')}`"
+    else:
+        await scheduler.update_task_status(
+            first_task.task_id, TaskStatus.FAILED, error=result.error
+        )
+        reply = f"任务执行失败: {result.error}"
+
+    await memory.save_message(session_id, "assistant", reply, task_id=first_task.task_id)
+    asyncio.create_task(
+        _post_chat_memory_update(memory, session_id, request.message, reply)
+    )
+
+    async def task_stream():
+        yield _sse({"type": "session", "session_id": session_id})
+        yield _sse({"type": "task", "task_id": first_task.task_id, "agent_type": first_task.agent_type.value})
+        yield _sse({"type": "delta", "content": reply})
+        yield _sse({"type": "done", "session_id": session_id, "task_id": first_task.task_id})
+
+    return StreamingResponse(task_stream(), media_type="text/event-stream")
+
+
+def _sse(data: dict) -> str:
+    """将 dict 格式化为 SSE 消息"""
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 async def _post_chat_memory_update(
@@ -223,6 +354,17 @@ async def retry_task(task_id: str):
         )
 
     return {"task_id": task.task_id, "status": task.status.value}
+
+
+@router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str):
+    """删除任务"""
+    db = get_database()
+    scheduler = TaskScheduler(db)
+    deleted = await scheduler.delete_task(task_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return {"detail": "已删除", "task_id": task_id}
 
 
 # ---------- 记忆管理 API ----------

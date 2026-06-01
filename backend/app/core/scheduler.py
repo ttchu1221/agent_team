@@ -116,3 +116,14 @@ class TaskScheduler:
             return_document=True,
         )
         return TaskDocument(**res) if res else None
+
+    async def delete_task(self, task_id: str) -> bool:
+        """删除任务及其子任务"""
+        # 先删除子任务
+        await self.collection.delete_many({"parent_task_id": task_id})
+        # 再删除主任务
+        res = await self.collection.delete_one({"task_id": task_id})
+        if res.deleted_count > 0:
+            logger.info("task_deleted", task_id=task_id)
+            return True
+        return False

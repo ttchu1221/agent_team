@@ -11,6 +11,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.agents.base import BaseAgent, AgentResult
 from app.models.task import TaskDocument, TaskStatus, AgentType
 from app.tools.search.search import SearchTool
+from app.tools.obsidian.obsidian import ObsidianTool
 
 logger = structlog.get_logger()
 
@@ -34,25 +35,57 @@ class ResearchAgent(BaseAgent):
     def __init__(self, router=None, db: AsyncIOMotorDatabase | None = None):
         super().__init__(router=router, db=db)
         self.search_tool = SearchTool()
+        self.obsidian_tool = ObsidianTool()
 
     async def execute(self, task_input: dict, context: dict | None = None) -> AgentResult:
         """执行学术研究相关任务"""
         task_type = task_input.get("task_type", "general")
         content = task_input.get("content", "")
+        save_to_obsidian = task_input.get("save_to_obsidian", False)
 
+        result = None
         if task_type == "paper_summary":
-            return await self._summarize_paper(content)
+            result = await self._summarize_paper(content)
         elif task_type == "search_papers":
-            return await self._search_papers(content, task_input.get("max_results", 5))
+            result = await self._search_papers(content, task_input.get("max_results", 5))
         elif task_type == "research_daily":
             topic = task_input.get("topic", content)
-            return await self._generate_research_daily(topic)
+            result = await self._generate_research_daily(topic)
         elif task_type == "literature_review":
-            return await self._literature_review(content)
+            result = await self._literature_review(content)
         elif task_type == "idea_generation":
-            return await self._generate_ideas(content)
+            result = await self._generate_ideas(content)
         else:
-            return await self._general_research(content)
+            result = await self._general_research(content)
+
+        # 如果需要保存到 Obsidian
+        if save_to_obsidian and result and result.success:
+            obsidian_result = await self._save_to_obsidian(
+                content=result.data if isinstance(result.data, str) else result.data.get("analysis", str(result.data)),
+                title=task_input.get("obsidian_title", content[:50]),
+                tags=task_input.get("obsidian_tags", ["research", "agent"]),
+                source=task_input.get("obsidian_source", ""),
+            )
+            if obsidian_result.success:
+                result.metadata = result.metadata or {}
+                result.metadata["obsidian"] = obsidian_result.data
+
+        return result
+
+    async def _save_to_obsidian(
+        self,
+        content: str,
+        title: str,
+        tags: list[str] | None = None,
+        source: str = "",
+    ) -> ToolResult:
+        """保存内容到 Obsidian Vault"""
+        return await self.obsidian_tool.execute(
+            title=title,
+            content=content,
+            tags=tags or ["research", "agent"],
+            source=source,
+        )
 
     async def _search_papers(self, query: str, max_results: int = 5) -> AgentResult:
         """搜索学术论文"""
